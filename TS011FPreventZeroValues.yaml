@@ -1,0 +1,81 @@
+blueprint:
+  name: TS011F Smart Plug - Prevent bug with mqtt
+  description: Remove power 0, after a delay if new value is more than previous 0 value. And Preserve it, if real consumption is 0
+  domain: automation
+  source_url: https://github.com/Dodoww/HassBlueprints/blob/main/TS011FPreventZeroValues.yaml
+  input:
+    smart_plug_switch: 
+      name: TS011F Switch.
+      description: Switch entity (to monitor only when switch state is on)
+      selector:
+        entity:
+          domain: switch
+          multiple: false
+    from_sensor_entity:
+      name: TS011F power sensor.
+      description: Power sensor from mqtt, having some issue with "noised" data.
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+          multiple: false
+    to_input_text_entity:
+      name: TS011F Power Input Text
+      description: Intermediate input text for saving power for sensor.
+      selector:
+        entity:
+          domain: input_text
+          multiple: false
+    delay_to_wait:
+      name: Delay to renew check on sensor.
+      default: "00:10:00"
+      selector:
+        duration: {}
+variables:
+  power_sensor: !input from_sensor_entity
+mode: single
+max_exceeded: silent
+trigger:
+  platform: state
+  entity_id: !input from_sensor_entity
+condition: []
+action:
+  if:
+    condition: state
+    entity_id: !input smart_plug_switch
+    state: "on"
+  then:
+    if:
+      - condition: numeric_state
+        entity_id: !input from_sensor_entity
+        below: 1
+    then:
+      - delay: !input delay_to_wait
+      - if:
+          - condition: numeric_state
+            entity_id: !input from_sensor_entity
+            above: 0
+        then:
+          - service: input_text.set_value
+            data:
+              value: "{{ states(power_sensor) }}"
+            target:
+              entity_id: !input to_input_text_entity
+        else:
+          - service: input_text.set_value
+            data:
+              value: "0"
+            target:
+              entity_id: !input to_input_text_entity
+    else:
+      - service: input_text.set_value
+        data:
+          value: "{{ states(power_sensor) }}"
+        target:
+          entity_id: !input to_input_text_entity
+  else:
+    service: input_text.set_value
+    data:
+      value: "0"
+    target:
+      entity_id: !input to_input_text_entity
